@@ -209,7 +209,9 @@ func maybeId(cmd, id string) string {
 	return cmd
 }
 
-func newConn(c net.Conn) (res *Conn, err error) {
+// NewConn creates an NNTP connection from an existing net.Conn.
+// Returns the NNTP Conn and the underlying net.Conn for deadline management.
+func NewConn(c net.Conn) (res *Conn, underlying net.Conn, err error) {
 	res = &Conn{
 		conn: c,
 		w:    c,
@@ -217,10 +219,10 @@ func newConn(c net.Conn) (res *Conn, err error) {
 	}
 
 	if _, err = res.r.ReadString('\n'); err != nil {
-		return
+		return nil, nil, err
 	}
 
-	return
+	return res, c, nil
 }
 
 // Dial connects to an NNTP server.
@@ -228,14 +230,15 @@ func newConn(c net.Conn) (res *Conn, err error) {
 // make the connection.
 //
 // Example:
-//   conn, err := nntp.Dial("tcp", "my.news:nntp")
 //
+//	conn, err := nntp.Dial("tcp", "my.news:nntp")
 func Dial(network, addr string) (*Conn, error) {
 	c, err := net.Dial(network, addr)
 	if err != nil {
 		return nil, err
 	}
-	return newConn(c)
+	conn, _, err := NewConn(c)
+	return conn, err
 }
 
 // Same as Dial but handles TLS connections
@@ -260,7 +263,8 @@ func DialTLS(network, addr string, config *tls.Config) (*Conn, error) {
 		}
 	}
 	// return nntp Conn
-	return newConn(c)
+	conn, _, err := NewConn(c)
+	return conn, err
 }
 
 // Enables tracing, such that future IO gets dumped to the indicated writers,
@@ -661,10 +665,9 @@ func (c *Conn) EnableCompression() error {
 // List returns a list of groups present on the server.
 // Valid forms are:
 //
-//   List() - return active groups
-//   List(keyword) - return different kinds of information about groups
-//   List(keyword, pattern) - filter groups against a glob-like pattern called a wildmat
-//
+//	List() - return active groups
+//	List(keyword) - return different kinds of information about groups
+//	List(keyword, pattern) - filter groups against a glob-like pattern called a wildmat
 func (c *Conn) List(a ...string) ([]*Group, error) {
 	if len(a) > 2 {
 		return nil, ProtocolError("List only takes up to 2 arguments")
